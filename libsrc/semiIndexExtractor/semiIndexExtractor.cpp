@@ -112,9 +112,126 @@ void semiIndexExtractor::coresDecomposition(const Graph& graph)
         }
     }
 
+    if(!cores.empty())
+    {
+        cores.clear();
+    }
+
     for(size_t localID = 0; localID < vertexNum; localID++)
     {
         cores[local2global[localID]] = degree[localID];
+    }
+}
+
+VertexID semiIndexExtractor::getLiIndexTop() const
+{
+    std::map<uint, std::list<VertexID>>::const_reverse_iterator it = liIndex.rbegin();
+    if(it == liIndex.rend())
+    {
+        std::cerr << "LiIndex is empty." << std::endl;
+        throw std::out_of_range("LiIndex is empty.");
+    }
+    return it->second.front();
+}
+
+void semiIndexExtractor::liIndexPop()
+{
+    std::map<uint, std::list<VertexID>>::reverse_iterator it = liIndex.rbegin();
+    if(it == liIndex.rend())
+    {
+        std::cerr << "LiIndex is empty." << std::endl;
+        throw std::out_of_range("LiIndex is empty.");
+    }
+    liIndexExists.erase(it->second.front());
+    it->second.pop_front();
+    if(it->second.empty())
+    {
+        liIndex.erase(it->first);
+    }
+}
+
+void semiIndexExtractor::initLiIndex(const VertexID& queryV)
+{
+    liIndex.clear();
+    liIndex[0].push_back(queryV);
+    liIndexExists[queryV] = 0;
+}
+
+void semiIndexExtractor::insertToLiIndex(const Graph& graph, const VertexID& vid, std::unordered_map<VertexID, bool>& visited, const uint& k)
+{
+    std::vector<VertexID> neighbors;
+    for(const VertexID& neighbor : graph.getVertexNeighbors(vid))
+    {
+        if(!visited[neighbor] && cores[neighbor] > k)
+        {
+            neighbors.emplace_back(neighbor);
+        }
+    }
+
+    if(neighbors.empty())
+    {
+        return;
+    }
+
+    for(const VertexID& neighbor : neighbors)
+    {
+        if(liIndexExists.find(neighbor) == liIndexExists.end()) // 未加入LiIndex
+        {
+            liIndex[1].push_back(neighbor);
+            liIndexExists[neighbor] = 1;
+        }
+        else // 已加入LiIndex
+        {
+            uint li = liIndexExists[neighbor];
+            liIndex[li].remove(neighbor);
+            liIndex[li + 1].push_back(neighbor);
+            liIndexExists[neighbor] = li + 1;
+        }
+    }
+}
+
+bool semiIndexExtractor::isLiIndexEmpty() const
+{
+    return liIndex.empty();
+}
+
+void semiIndexExtractor::candidateGeneration(const Graph& graph, const VertexID& queryV, const uint& k)
+{
+    if(!candVertices.empty())
+    {
+        candVertices.clear();
+    }
+    std::unordered_map<VertexID, bool> visited;
+
+    for(const std::pair<VertexID, Vertex>& nodePair : graph.getNodes())
+    {
+        visited[nodePair.first] = false;
+    }
+
+    initLiIndex(queryV);
+    visited[queryV] = true;
+
+    while(!isLiIndexEmpty())
+    {
+        VertexID currentV = getLiIndexTop();
+        liIndexPop();
+
+        candGraph.addVertex(currentV, false, false);
+        candVertices.emplace_back(currentV);
+
+        uint minDegree = std::numeric_limits<uint>::max();
+        for(const VertexID& v : candVertices)
+        {
+            minDegree = std::min(minDegree, candGraph.getVertexDegree(v));
+        }
+
+        if(minDegree >= k)
+        {
+            break;
+        }
+
+        // 批量更新LiIndex
+        insertToLiIndex(graph, currentV, visited, k);
     }
 }
 

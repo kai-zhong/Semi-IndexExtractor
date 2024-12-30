@@ -8,6 +8,8 @@
 #include <queue>
 #include <sstream>
 #include <utility>
+#include <unordered_map>
+#include <unordered_set>
 #include "../util/cmdline.h"
 #include "../configuration/types.h"
 #include "../configuration/config.h"
@@ -112,6 +114,22 @@ struct VOEntry
         }
     }
 };
+
+template<typename T>
+uint countCommonElements(const std::vector<T>& vec1, const std::vector<T>& vec2)
+{
+    std::unordered_set<T> set1(vec1.begin(), vec1.end());
+
+    size_t commonCount = 0;
+    for(const auto& element : vec2)
+    {
+        if(set1.find(element) != set1.end())
+        {
+            commonCount++;
+        }
+    }
+    return commonCount;
+}
 
 cmdOptions parseCmdLineArgs(int argc, char* argv[]);
 

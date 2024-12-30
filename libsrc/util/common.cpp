@@ -9,7 +9,6 @@ cmdOptions parseCmdLineArgs(int argc, char* argv[])
     parser.add<std::string>("filename", 'f', "Graph data file path", true);
     parser.add<VertexID>("query", 'q', "Query vertex ID", true);
     parser.add<uint>("k", 'k', "kmax of k-core subgraph", true);
-    parser.add<uint>("khop", 'h', "k-hop neighborhood of query vertex", false, 6);
     parser.add<uint>("maxcapacity", 'c', "Maximum capacity of the Mbptree", false, 16);
 
     parser.parse_check(argc, argv);
@@ -18,7 +17,6 @@ cmdOptions parseCmdLineArgs(int argc, char* argv[])
     options.filename = parser.get<std::string>("filename");
     options.query = parser.get<VertexID>("query");
     options.k = parser.get<uint>("k");
-    options.khop = parser.get<uint>("khop");
     options.maxcapacity = parser.get<uint>("maxcapacity");
 
     if(verbose)
@@ -26,7 +24,6 @@ cmdOptions parseCmdLineArgs(int argc, char* argv[])
         std::cout << "file path: "<< options.filename << std::endl;
         std::cout << "query vertex: "<< options.query << std::endl;
         std::cout << "k: " << options.k << std::endl;
-        std::cout << "khop: " << options.khop << std::endl;
         std::cout << "max capacity: " << options.maxcapacity << std::endl;
         std::cout << PRINT_SEPARATOR << std::endl;
     }
@@ -77,3 +74,4 @@ std::queue<VOEntry> convertVectorToQueue(const std::vector<VOEntry>& VO)
     }
     return queue;
 }
+

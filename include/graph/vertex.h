@@ -28,6 +28,7 @@ class Vertex
 
         VertexID getVid() const;
         uint getDegree() const;
+        VertexID getMaxDegreeNeighbor() const;
         std::array<unsigned char, SHA256_DIGEST_LENGTH> getDigest() const;
         const std::vector<VertexID>& getNeighbors() const;
 

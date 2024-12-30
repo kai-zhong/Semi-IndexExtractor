@@ -56,6 +56,20 @@ VertexID Graph::getMinDegreeVertexID()
     return minVid;
 }
 
+uint Graph::getMinDegreeWithtraversal()
+{
+    uint minDegree = std::numeric_limits<uint>::max();
+    for(const std::pair<uint, Vertex>& nodepair : nodes)
+    {
+        uint degree = nodepair.second.getDegree();
+        if(degree < minDegree)
+        {
+            minDegree = degree;
+        }
+    }
+    return minDegree;
+}
+
 uint Graph::getVertexNum() const
 {
     return vertex_num;
@@ -273,8 +287,7 @@ void Graph::updateInvertedIndexADV(const VertexID& vid)
 
 void Graph::updateInvertedIndexAAV(const VertexID& vid)
 {
-    Vertex node = nodes.at(vid);
-    uint degree = node.getDegree();
+    uint degree = nodes.at(vid).getDegree();
 
     invertedIndex[degree].push_back(vid);
 }

@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <map>
+#include <queue>
 #include <string>
 #include <climits>
 #include <fstream>
@@ -25,7 +26,7 @@ class Graph
     private:
         uint vertex_num;
         uint edge_num; // 因为是无向图，所以一条边只算一次，边（0，1）和边（1，0）不会重复计算，只添加一次
-        std::map<uint, Vertex> nodes;
+        std::map<VertexID, Vertex> nodes;
         std::map<uint, std::list<VertexID>> invertedIndex;
 
     public:
@@ -33,6 +34,8 @@ class Graph
         ~Graph();
 
         VertexID getMinDegreeVertexID();
+
+        uint getMinDegreeWithtraversal();
 
         uint getVertexNum() const;
         uint getEdgeNum() const;
