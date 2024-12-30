@@ -87,6 +87,16 @@ Vertex Graph::getVertex(const VertexID& vid) const
     return nodes.at(vid);
 }
 
+const std::vector<VertexID>& Graph::getVertexNeighbors(const VertexID& vid) const
+{
+    if(!hasVertex(vid))
+    {
+        std::cerr << "Error: Vertex " << vid << " does not exist!" << std::endl;
+        throw std::runtime_error("Vertex " + std::to_string(vid) + " does not exist!");
+    }
+    return nodes.at(vid).getNeighbors();
+}
+
 std::array<unsigned char, SHA256_DIGEST_LENGTH> Graph::getVertexDigest(const VertexID& vid) const
 {
     if(!hasVertex(vid))
@@ -284,6 +294,20 @@ void Graph::computeVertexDigest()
     {
         node.second.digestCompute();
     }
+}
+
+std::vector<VertexID> Graph::convertToLocalID() const
+{
+    std::vector<VertexID> local2global(vertex_num);
+
+    VertexID localIndex = 0;
+
+    for(const std::pair<VertexID, Vertex>& nodePair : nodes)
+    {
+        local2global[localIndex] = nodePair.first;
+        localIndex++;
+    }
+    return local2global;
 }
 
 void Graph::printGraphInfo(int verboseNodeNum) const

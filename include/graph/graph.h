@@ -37,9 +37,9 @@ class Graph
         uint getVertexNum() const;
         uint getEdgeNum() const;
         uint getVertexDegree(const VertexID& vid) const;
-
+        
         Vertex getVertex(const VertexID& vid) const;
-
+        const std::vector<VertexID>& getVertexNeighbors(const VertexID& vid) const;
         std::array<unsigned char, SHA256_DIGEST_LENGTH> getVertexDigest(const VertexID& vid) const;
 
         const std::map<uint, Vertex>& getNodes() const;
@@ -60,6 +60,8 @@ class Graph
         void updateInvertedIndexAUE(const VertexID& src, const VertexID& dst); // 更新边（包括删除和增加）后更新倒排索引
 
         void computeVertexDigest();
+
+        std::vector<VertexID> convertToLocalID() const;
 
         void printGraphInfo(int verboseNodeNum = -1) const;
         void printGraphInfoSimple(int verboseNodeNum = -1) const;
