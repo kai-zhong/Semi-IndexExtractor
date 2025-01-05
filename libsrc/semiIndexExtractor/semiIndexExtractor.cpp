@@ -2,6 +2,7 @@
 
 semiIndexExtractor::semiIndexExtractor()
 {
+    answerExists = false;
 }
 
 semiIndexExtractor::~semiIndexExtractor()
@@ -162,7 +163,7 @@ void semiIndexExtractor::insertToLiIndex(const Graph& graph, const VertexID& vid
     std::vector<VertexID> neighbors;
     for(const VertexID& neighbor : graph.getVertexNeighbors(vid))
     {
-        if(!visited[neighbor] && cores[neighbor] > k)
+        if(!visited[neighbor] && cores[neighbor] >= k)
         {
             neighbors.emplace_back(neighbor);
         }
@@ -184,6 +185,10 @@ void semiIndexExtractor::insertToLiIndex(const Graph& graph, const VertexID& vid
         {
             uint li = liIndexExists[neighbor];
             liIndex[li].remove(neighbor);
+            if(liIndex[li].empty())
+            {
+                liIndex.erase(li);
+            }
             liIndex[li + 1].push_back(neighbor);
             liIndexExists[neighbor] = li + 1;
         }
@@ -209,11 +214,11 @@ void semiIndexExtractor::candidateGeneration(const Graph& graph, const VertexID&
     }
 
     initLiIndex(queryV);
-    visited[queryV] = true;
 
     while(!isLiIndexEmpty())
     {
         VertexID currentV = getLiIndexTop();
+        visited[currentV] = true;
         liIndexPop();
 
         candGraph.addVertex(currentV, false, false);
@@ -224,15 +229,89 @@ void semiIndexExtractor::candidateGeneration(const Graph& graph, const VertexID&
         {
             minDegree = std::min(minDegree, candGraph.getVertexDegree(v));
         }
-
+        std::cout << "MinDegree : " << minDegree << std::endl;
         if(minDegree >= k)
         {
+            answerExists = true;
             break;
         }
 
         // 批量更新LiIndex
         insertToLiIndex(graph, currentV, visited, k);
+        std::cout << "CurrentV : " << currentV << ": "<<std::endl;
+        printLiIndex();
     }
+}
+
+void semiIndexExtractor::globalExtract(const VertexID& queryV, const uint& k)
+{
+    VertexID minDegreeV;
+    uint deg;
+    bool satisfyKcore = false;
+    Graph kcoreG;
+    while(true)
+    {
+        minDegreeV = candGraph.getMinDegreeVertexID();
+        deg = candGraph.getVertexDegree(minDegreeV);
+        if(deg < k)
+        {
+            if(minDegreeV == queryV)
+            {
+                break;
+            }
+            candGraph.removeVertex(minDegreeV, true, false);
+        }
+        else
+        {
+            satisfyKcore = true;
+            break;
+        }
+    }
+    if(!satisfyKcore)
+    {
+        std::cout << "The graph does not satisfy k-core property." << std::endl;
+    }
+}
+
+Graph semiIndexExtractor::kcoreExtract(const Graph& graph, const VertexID& queryV, const uint& k)
+{
+    if(!answerExists)
+    {
+        answerExists = false;
+    }
+
+    candidateGeneration(graph, queryV, k);
+
+    if(!answerExists)
+    {
+        candGraph.buildInvertedIndex();
+        globalExtract(queryV, k);
+    }
+    return candGraph;
+}
+
+const Graph& semiIndexExtractor::getCandGraph() const
+{
+    return candGraph;
+}
+
+void semiIndexExtractor::printLiIndex() const
+{
+    if(liIndex.empty())
+    {
+        std::cout << "LiIndex is empty." << std::endl;
+        return;
+    }
+    for (const auto& pair : liIndex)
+    {
+        std::cout << "Key: " << pair.first << ", Values: ";
+        for (const auto& value : pair.second)
+        {
+            std::cout << value << " ";
+        }
+        std::cout << std::endl;
+    }
+    std::cout << std::endl;
 }
 
 void semiIndexExtractor::printCores() const

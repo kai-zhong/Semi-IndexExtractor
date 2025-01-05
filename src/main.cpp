@@ -1,6 +1,5 @@
 #include <iostream>
 
-#include "./avlTree/avlTree.h"
 #include "./util/common.h"
 #include "./semiIndexExtractor/semiIndexExtractor.h"
 
@@ -15,7 +14,9 @@ int main(int argc, char* argv[])
     std::cout << "Graph Vertex Num : " << graph.getVertexNum() << std::endl;
 
     extractor.coresDecomposition(graph);
-    extractor.printCores();
+    // extractor.printCores();
 
+    extractor.candidateGeneration(graph, options.query, options.k);
+    extractor.getCandGraph().printGraphInfoSimple();
     return 0;
 }

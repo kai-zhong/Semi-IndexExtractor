@@ -25,6 +25,8 @@ class semiIndexExtractor
 
         std::map<uint, std::list<VertexID>> liIndex;
         std::unordered_map<VertexID, uint> liIndexExists;
+
+        bool answerExists;
     public:
         semiIndexExtractor();
         ~semiIndexExtractor();
@@ -35,6 +37,10 @@ class semiIndexExtractor
 
         void candidateGeneration(const Graph& graph, const VertexID& queryV, const uint& k);
 
+        void globalExtract(const VertexID& queryV, const uint& k);
+
+        Graph kcoreExtract(const Graph& graph, const VertexID& queryV, const uint& k);
+
         VertexID getLiIndexTop() const;
 
         void liIndexPop();
@@ -44,6 +50,10 @@ class semiIndexExtractor
         void insertToLiIndex(const Graph& graph, const VertexID& vid, std::unordered_map<VertexID, bool>& visted, const uint& k);
 
         bool isLiIndexEmpty() const;
+
+        const Graph& getCandGraph() const;
+
+        void printLiIndex() const;
 
         void printCores() const;
 };
