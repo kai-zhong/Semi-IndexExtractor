@@ -405,22 +405,24 @@ void semiIndexExtractor::candidateGeneration(const Graph& graph, const VertexID&
         visited[currentV] = true;
         liIndexPop();
 
-        candGraph.addVertex(currentV, false, false);
+        candGraph.addVertex(currentV, true, false);
         for(const VertexID& neighbor : graph.getVertexNeighbors(currentV))
         {
             if(visited[neighbor] == true)
             {
-                candGraph.addEdge(currentV, neighbor, false, false);
+                candGraph.addEdge(currentV, neighbor, true, false);
             }
         }
         candVertices.emplace_back(currentV);
 
-        uint minDegree = std::numeric_limits<uint>::max();
-        for(const VertexID& v : candVertices)
-        {
-            minDegree = std::min(minDegree, candGraph.getVertexDegree(v));
-        }
+        // uint minDegree = std::numeric_limits<uint>::max();
+        // for(const VertexID& v : candVertices)
+        // {
+        //     minDegree = std::min(minDegree, candGraph.getVertexDegree(v));
+        // }
         // std::cout << "MinDegree : " << minDegree << std::endl;
+        
+        uint minDegree = candGraph.getVertexDegree(candGraph.getMinDegreeVertexID());
         if(minDegree >= k)
         {
             std::cout << "Answer exists." << std::endl;
@@ -441,7 +443,7 @@ void semiIndexExtractor::globalExtract(const VertexID& queryV, const uint& k)
     uint deg;
     bool satisfyKcore = false;
     Graph kcoreG;
-    candGraph.printGraphInfoSimple();
+    // candGraph.printGraphInfoSimple();
     while(true)
     {
         minDegreeV = candGraph.getMinDegreeVertexID();

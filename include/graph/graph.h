@@ -34,7 +34,6 @@ class Graph
         ~Graph();
 
         VertexID getMinDegreeVertexID();
-
         uint getMinDegreeWithtraversal();
 
         uint getVertexNum() const;
