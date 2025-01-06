@@ -9,6 +9,8 @@
 
 #include "../graph/graph.h"
 #include "../graph/vertex.h"
+#include "../mbptree/mbpnode.h"
+#include "../mbptree/mbptree.h"
 #include "../util/common.h"
 #include "../configuration/types.h"
 
@@ -27,10 +29,27 @@ class semiIndexExtractor
         std::unordered_map<VertexID, uint> liIndexExists;
 
         bool answerExists;
+
+        MbpTree* mbptree;
+        std::vector<VOEntry> vo;
     public:
         semiIndexExtractor();
         ~semiIndexExtractor();
         
+        void buildMbpTree(const Graph& graph, const uint maxcapacity);
+
+        std::map<VertexID, std::string> serializeGraphInfo(const Graph& graph, const Graph& subgraph, std::vector<VertexID>& subgraphVids);
+
+        void constructVO(const Graph& G, const Graph& subgraph);
+
+        void getRootDigest(unsigned char* _digest);
+
+        void vertify(Graph& subgraph, std::queue<VOEntry>& VO, unsigned char* partdigest);
+
+        void calculateVOSize();
+
+        const std::vector<VOEntry>& getVO() const;
+
         const uint& getCore(const VertexID& vid) const;
 
         void coresDecomposition(const Graph& graph);
@@ -52,6 +71,8 @@ class semiIndexExtractor
         bool isLiIndexEmpty() const;
 
         const Graph& getCandGraph() const;
+
+        void printVO() const;
 
         void printLiIndex() const;
 

@@ -11,12 +11,18 @@ int main(int argc, char* argv[])
     semiIndexExtractor extractor;
     
     graph.loadGraphfromFile(options.filename);
-    std::cout << "Graph Vertex Num : " << graph.getVertexNum() << std::endl;
+    extractor.buildMbpTree(graph, options.maxcapacity);
+    // std::cout << "Graph Vertex Num : " << graph.getVertexNum() << std::endl;
 
     extractor.coresDecomposition(graph);
     // extractor.printCores();
+    extractor.kcoreExtract(graph, options.query, options.k);
 
-    extractor.candidateGeneration(graph, options.query, options.k);
-    extractor.getCandGraph().printGraphInfoSimple();
+    Graph resultGraph;
+    unsigned char vertifyDigest[SHA256_DIGEST_LENGTH];
+    std::queue<VOEntry> queueVO = convertVectorToQueue(extractor.getVO());
+    extractor.vertify(resultGraph, queueVO, vertifyDigest);
+    extractor.calculateVOSize();
+
     return 0;
 }

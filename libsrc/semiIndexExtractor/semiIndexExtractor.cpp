@@ -3,10 +3,194 @@
 semiIndexExtractor::semiIndexExtractor()
 {
     answerExists = false;
+    mbptree = nullptr;
 }
 
 semiIndexExtractor::~semiIndexExtractor()
 {
+    if(mbptree != nullptr)
+    {
+        delete mbptree;
+    }
+}
+
+void semiIndexExtractor::buildMbpTree(const Graph& graph, const uint maxcapacity)
+{
+    if(mbptree != nullptr)
+    {
+        delete mbptree;
+        mbptree = nullptr;
+    }
+    mbptree = new MbpTree(maxcapacity);
+    for(const std::pair<uint, Vertex>& nodepair : graph.getNodes())
+    {
+        VertexID vid = nodepair.first;
+        mbptree->setVertexDigest(vid, graph.getVertexDigest(vid));
+    }
+    mbptree->getRoot()->digestCompute();
+}
+
+std::map<VertexID, std::string> semiIndexExtractor::serializeGraphInfo(const Graph& graph, const Graph& subgraph, std::vector<VertexID>& subgraphVids)
+{
+    std::map<VertexID, std::string> serializedInfo;
+    std::ostringstream oss;
+
+    for(const std::pair<uint, Vertex>& nodepair : subgraph.getNodes())
+    {
+        unsigned char splitter = '/';
+        oss = std::ostringstream();
+        VertexID vid = nodepair.first;
+        const Vertex& subgraphNode = nodepair.second;
+        const Vertex& graphNode = graph.getVertex(vid);
+        const std::vector<VertexID>& subgraphNeighbors = subgraphNode.getNeighbors();
+        const std::vector<VertexID>& graphNeighbors = graphNode.getNeighbors();
+
+        subgraphVids.emplace_back(vid);
+
+        oss << vid;
+        for(const VertexID& subNeighbor : subgraphNeighbors)
+        {
+            oss << splitter << subNeighbor;
+        }
+        oss << '|' << vid;
+        for(const VertexID& graphNeighbor : graphNeighbors)
+        {
+            oss << splitter << graphNeighbor;
+        }
+
+        serializedInfo[vid] = oss.str();
+    }
+    return serializedInfo;
+}
+
+void semiIndexExtractor::constructVO(const Graph& G, const Graph& subgraph)
+{
+    std::vector<VertexID> subgraphVids;
+    subgraphVids.reserve(subgraph.getVertexNum());
+    std::map<VertexID, std::string> serializedInfo = serializeGraphInfo(G, subgraph, subgraphVids);
+    std::cout << "Serialized graph information has been constructed. " << std::endl;
+    mbptree->constructVO(vo, subgraphVids, serializedInfo);
+    std::cout << "VO has been constructed." << std::endl;
+}
+
+void semiIndexExtractor::getRootDigest(unsigned char* _digest)
+{
+    if(mbptree != nullptr)
+    {
+        mbptree->getRoot()->getDigest(_digest);
+    }
+    else
+    {
+        std::cerr << "MbpTree is not built." << std::endl;
+        throw std::out_of_range("MbpTree is not built.");
+    }
+}
+
+void semiIndexExtractor::vertify(Graph& subgraph, std::queue<VOEntry>& VO, unsigned char* partDigest)
+{
+    unsigned char vertifyDigest[SHA256_DIGEST_LENGTH];
+    SHA256_CTX ctx;
+    SHA256_Init(&ctx);
+    while(!VO.empty())
+    {
+        VOEntry entry = VO.front();
+        VO.pop();
+        if(entry.type == VOEntry::NODEDATA)
+        {
+            if(entry.nodeData != nullptr)
+            {
+                // 构建子图
+                std::string nodeDataStr(entry.nodeData);
+                std::pair<std::string, std::string> infoPair = splitStringtoTwoParts(nodeDataStr, "|");
+                std::string subgraphNodeDataStr = infoPair.first;
+                std::string graphNodeDataStr = infoPair.second;
+                std::vector<VertexID> subvertexInfo;
+                splitString(subgraphNodeDataStr, "/", subvertexInfo);
+                VertexID vid = subvertexInfo[0];
+                for(size_t i = 1; i < subvertexInfo.size(); i++)
+                {
+                    subgraph.addEdge(vid, subvertexInfo[i], false, false);
+                }
+
+                // 计算摘要
+                unsigned char subgraphVertexDigest[SHA256_DIGEST_LENGTH];
+                SHA256_CTX minictx;
+                SHA256_Init(&minictx);
+                SHA256_Update(&minictx, (unsigned char*)graphNodeDataStr.c_str(), graphNodeDataStr.size());
+                SHA256_Final(subgraphVertexDigest, &minictx);
+
+                // std::cout << "Vertex " << vid  << ": ";
+                // std::cout << graphNodeDataStr << " -> ";
+                // digestPrint(subgraphVertexDigest);
+
+                SHA256_Update(&ctx, subgraphVertexDigest, SHA256_DIGEST_LENGTH);
+            }
+        }
+        else if(entry.type == VOEntry::DIGEST)
+        {
+            // std::cout << "VOENTRY_DIGEST: ";
+            // digestPrint(entry.digest);
+            SHA256_Update(&ctx, entry.digest, SHA256_DIGEST_LENGTH);
+        }
+        else if(entry.type == VOEntry::SPECIAL)
+        {
+            if(entry.specialChar == '[')
+            {
+                unsigned char innerDigest[SHA256_DIGEST_LENGTH];
+                vertify(subgraph, VO, innerDigest);
+                if(VO.empty())
+                {
+                    memcpy(vertifyDigest, innerDigest, SHA256_DIGEST_LENGTH);
+                    break;
+                }
+                else
+                {
+                    SHA256_Update(&ctx, innerDigest, SHA256_DIGEST_LENGTH);
+                }
+            }
+            else if(entry.specialChar == ']')
+            {
+                SHA256_Final(partDigest, &ctx);
+                return ;
+            }
+        }
+        else
+        {
+            std::cerr << "Unknown VOEntry type: " << entry.type << std::endl;
+            throw std::runtime_error("Unknown VOEntry type.");
+        }
+    }
+    std::cout << "Vertify digest: ";
+    digestPrint(vertifyDigest);
+    unsigned char rootDigest[SHA256_DIGEST_LENGTH];
+    getRootDigest(rootDigest);
+    std::cout << "Root digest: ";
+    digestPrint(rootDigest);
+    std::cout << std::endl;
+}
+
+void semiIndexExtractor::calculateVOSize()
+{
+    // size_t totalSize = sizeof(vo); // vector 内部结构的占用
+    size_t totalSize = 0; // 仅计算 VOEntry 占用的大小
+    for(const auto& entry : vo)
+    {
+        totalSize += sizeof(entry); // 每个 VOEntry 的占用
+        if(entry.type == VOEntry::NODEDATA && entry.nodeData != nullptr)
+        {
+            totalSize += std::strlen(entry.nodeData) + 1; // 动态分配的 nodeData 大小
+        }
+    }
+    std::cout << "Total size of vo:" << std::endl;
+    std::cout << "  Bytes: " << totalSize << " B" << std::endl;
+    std::cout << "  Kilobytes: " << totalSize / 1024.0 << " KB" << std::endl;
+    std::cout << "  Megabytes: " << totalSize / (1024.0 * 1024.0) << " MB" << std::endl;
+    std::cout << std::endl;
+}
+
+const std::vector<VOEntry>& semiIndexExtractor::getVO() const
+{
+    return vo;
 }
 
 const uint& semiIndexExtractor::getCore(const VertexID& vid) const
@@ -222,6 +406,13 @@ void semiIndexExtractor::candidateGeneration(const Graph& graph, const VertexID&
         liIndexPop();
 
         candGraph.addVertex(currentV, false, false);
+        for(const VertexID& neighbor : graph.getVertexNeighbors(currentV))
+        {
+            if(visited[neighbor] == true)
+            {
+                candGraph.addEdge(currentV, neighbor, false, false);
+            }
+        }
         candVertices.emplace_back(currentV);
 
         uint minDegree = std::numeric_limits<uint>::max();
@@ -229,17 +420,18 @@ void semiIndexExtractor::candidateGeneration(const Graph& graph, const VertexID&
         {
             minDegree = std::min(minDegree, candGraph.getVertexDegree(v));
         }
-        std::cout << "MinDegree : " << minDegree << std::endl;
+        // std::cout << "MinDegree : " << minDegree << std::endl;
         if(minDegree >= k)
         {
+            std::cout << "Answer exists." << std::endl;
             answerExists = true;
             break;
         }
 
         // 批量更新LiIndex
         insertToLiIndex(graph, currentV, visited, k);
-        std::cout << "CurrentV : " << currentV << ": "<<std::endl;
-        printLiIndex();
+        // std::cout << "CurrentV : " << currentV << ": "<<std::endl;
+        // printLiIndex();
     }
 }
 
@@ -249,6 +441,7 @@ void semiIndexExtractor::globalExtract(const VertexID& queryV, const uint& k)
     uint deg;
     bool satisfyKcore = false;
     Graph kcoreG;
+    candGraph.printGraphInfoSimple();
     while(true)
     {
         minDegreeV = candGraph.getMinDegreeVertexID();
@@ -287,12 +480,27 @@ Graph semiIndexExtractor::kcoreExtract(const Graph& graph, const VertexID& query
         candGraph.buildInvertedIndex();
         globalExtract(queryV, k);
     }
+
+    constructVO(graph, candGraph);
     return candGraph;
 }
 
 const Graph& semiIndexExtractor::getCandGraph() const
 {
     return candGraph;
+}
+
+void semiIndexExtractor::printVO() const
+{
+    for(size_t i = 0; i < vo.size(); i++)
+    {
+        vo[i].printVOEntry();
+        if(i < vo.size() - 1 && vo[i].type != VOEntry::SPECIAL && vo[i+1].type != VOEntry::SPECIAL)
+        {
+            std::cout << ", ";
+        }
+    }
+    std::cout << std::endl;
 }
 
 void semiIndexExtractor::printLiIndex() const
