@@ -390,6 +390,11 @@ std::vector<VertexID> OSTree::getVids()
     return vids;
 }
 
+uint OSTree::size() const
+{
+    return root->size;
+}
+
 void OSTree::display() const
 {
     inOrderTraversal(root);

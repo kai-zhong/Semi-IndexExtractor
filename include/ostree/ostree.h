@@ -58,6 +58,7 @@ class OSTree
         bool hasVertex(const VertexID& vid) const;
         VertexID at(uint index);
         std::vector<VertexID> getVids();
+        uint size() const;
         void display() const;
         void showMap() const;
 };

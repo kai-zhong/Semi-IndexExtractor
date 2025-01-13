@@ -39,7 +39,7 @@ void CoreMaintainer::insertToOrderk(const std::vector<VertexID>& vert, const std
     for(uint i = 0; i < orderVert.size(); i++)
     {
         ostrees[k].insertBack(local2global[orderVert[i]]);
-        orderkV[k].push_back(local2global[orderVert[i]]);
+        // orderkV[k].push_back(local2global[orderVert[i]]);
     }
 
     // /* 小deg+优先 */
@@ -203,16 +203,11 @@ void CoreMaintainer::addVertex(const VertexID& vid)
     degPlus[vid] = 1;
     mcd[vid] = 1;
     ostrees.at(1).insertFront(vid);
-    orderkV.at(1).emplace_front(vid);
+    // orderkV.at(1).emplace_front(vid);
 }
 
 void CoreMaintainer::orderInsert(const Graph& graph, const VertexID src, const VertexID dst) // 要考虑节点被新添加的情况
 {
-    static int cnt = 0;
-    static std::chrono::milliseconds prepareTime(0);
-    static std::chrono::milliseconds coreMaintenanceTime(0);
-    static std::chrono::milliseconds endTime(0);
-
     if(cores.find(src) == cores.end() && cores.find(dst) == cores.end()) // 节点 src 和 dst 是新加入的节点
     {
         addVertex(src);
@@ -240,6 +235,8 @@ void CoreMaintainer::orderInsert(const Graph& graph, const VertexID src, const V
         return ;
     }
     /* 准备阶段 */
+    std::priority_queue<std::pair<uint, VertexID>, std::vector<std::pair<uint, VertexID>>, MinHeapCmp> minHeap;
+    std::unordered_set<VertexID> inHeap;
     auto start = std::chrono::high_resolution_clock::now();
     VertexID u = src; // k-order更小的节点
     VertexID v = dst; // k-order更大的节点
@@ -253,88 +250,52 @@ void CoreMaintainer::orderInsert(const Graph& graph, const VertexID src, const V
         v = src;
     }
     ++degPlus[u];
-    auto end = std::chrono::high_resolution_clock::now();
-    prepareTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
     
-
     /* 核心维护阶段 */
-    start = std::chrono::high_resolution_clock::now();
     if(degPlus[u] <= K)
     {
         return ;
     }
+    else
+    {
+        minHeap.push(std::make_pair(ost.getRank(u), u));
+        inHeap.insert(u);
+    }
 
-    std::list<VertexID>& orderK = orderkV.at(K); // 只表示处理顺序，节点顺序并不保持k-order
-    std::list<VertexID> _orderK;
     std::vector<VertexID> Vc; // 候选集(从Vc中删除只需要在inVc中删除即可，inVc中存在节点号才表示数据有效)，Vc的顺序保持k-order
     std::unordered_map<VertexID, uint> inVc; // 候选集中是否包含节点,uint保存了节点的k-order位置
 
     std::unordered_map<VertexID, uint> degStar;
 
-    static std::chrono::milliseconds mainCodeTime(0);
-    auto start1 = std::chrono::high_resolution_clock::now();
-    size_t orderkVSize = orderK.size();
-    degStar.reserve(orderkVSize);
-    for (const VertexID& v : orderK) 
+    while(!inHeap.empty())
     {
-        degStar.emplace(v, 0);
-    }
-    auto end1 = std::chrono::high_resolution_clock::now();
-    mainCodeTime += std::chrono::duration_cast<std::chrono::milliseconds>(end1 - start1);
-
-    for(std::list<VertexID>::iterator it = orderK.begin(); it!= orderK.end();)
-    {
-        VertexID curV = *it;
-
+        VertexID curV = minHeap.top().second;
+        uint curVRank = minHeap.top().first;
+        minHeap.pop();
+        inHeap.erase(curV);
         if(degStar[curV] + degPlus[curV] > K)
         {
-            uint curVRank = ost.getRank(curV);
             inVc[curV] = curVRank;
             Vc.emplace_back(curV);
-
             for(const VertexID& neighbor : graph.getVertexNeighbors(curV))
             {
-                if(cores.at(neighbor) == K && curVRank < ost.getRank(neighbor))
+                if(inHeap.find(neighbor) == inHeap.end() && cores.at(neighbor) == K && curVRank < ost.getRank(neighbor))
                 {
-                    degStar[neighbor]++;
+                    ++degStar[neighbor];
+                    minHeap.push(std::make_pair(ost.getRank(neighbor), neighbor));
+                    inHeap.insert(neighbor);
                 }
-            }
-
-            it = orderK.erase(it);
-        }
-        else if(degStar[curV] == 0)
-        {
-            while(it != orderK.end())
-            {
-                VertexID _vid = *it;
-                if(degStar[_vid] > 0 || degPlus[_vid] > K)
-                {
-                    break;
-                }
-                _orderK.emplace_back(_vid);
-                it = orderK.erase(it);
-            }
-            if(orderK.empty() || it == orderK.end())
-            {
-                break;
             }
         }
         else
         {
-            _orderK.emplace_back(curV);
             degPlus[curV] += degStar[curV];
             degStar[curV] = 0;
-            removeCandidates(graph, degStar, inVc, _orderK, curV, K); // 插入会_orderK中要使用顺序插入函数，保持k-order
-            it = orderK.erase(it);
+            removeCandidates(graph, degStar, inVc, inHeap, curV, K);
         }
     }
 
-
-    end = std::chrono::high_resolution_clock::now();
-    coreMaintenanceTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-
     /* 结束阶段 */
-    start = std::chrono::high_resolution_clock::now();
     std::vector<VertexID> VStar;
     for(const VertexID& w : Vc)
     {
@@ -347,31 +308,15 @@ void CoreMaintainer::orderInsert(const Graph& graph, const VertexID src, const V
     }
     for(int i = VStar.size() - 1; i >= 0; i--)
     {
-        ostrees[K].erase(VStar[i]);
-        orderkV[K+1].emplace_front(VStar[i]);
-        ostrees[K+1].insertFront(VStar[i]);
+        VertexID w = VStar[i];
+        ostrees[K].erase(w);
+        ostrees[K+1].insertFront(w);
     }
-    orderkV[K] = _orderK;
     updatemcdInsert(graph, VStar, K);
-    end = std::chrono::high_resolution_clock::now();
-    endTime += std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-
-    // if(++cnt % 1000 == 0)
-    // {
-    //     std::cout << cnt << "th round time: " << std::endl;
-    //     std::cout << "Prepare time: " << prepareTime.count() << "ms" << std::endl;
-    //     std::cout << "main code time: " << mainCodeTime.count() << "ms" << std::endl;
-    //     std::cout << "Core maintenance time: " << coreMaintenanceTime.count() << "ms" << std::endl;
-    //     std::cout << "End time: " << endTime.count() << "ms" << std::endl;
-    //     std::cout << "Total time: " << (prepareTime + coreMaintenanceTime + endTime).count() << "ms" << std::endl;
-    //     prepareTime = std::chrono::milliseconds(0);
-    //     mainCodeTime = std::chrono::milliseconds(0);
-    //     coreMaintenanceTime = std::chrono::milliseconds(0);
-    //     endTime = std::chrono::milliseconds(0);
-    // }
 }
 
-void CoreMaintainer::removeCandidates(const Graph& graph, std::unordered_map<VertexID, uint>& degStar, std::unordered_map<VertexID, uint>& inVc, std::list<VertexID>& _orderK, VertexID w, uint K)
+void CoreMaintainer::removeCandidates(const Graph& graph, std::unordered_map<VertexID, uint>& degStar, std::unordered_map<VertexID, uint>& inVc, 
+                                    std::unordered_set<VertexID>& inHeap, VertexID w, uint K)
 {
     OSTree& ost = ostrees.at(K);
     uint wRank = ost.getRank(w);
@@ -399,8 +344,8 @@ void CoreMaintainer::removeCandidates(const Graph& graph, std::unordered_map<Ver
 
         uint curVRank = inVc[curV];
         inVc.erase(curV);
-        std::list<VertexID>::iterator it = std::lower_bound(_orderK.begin(), _orderK.end(), curV, [&K, this](const uint& a, const uint& b){return comparekorder(a, b, K);});
-        _orderK.insert(it, curV);
+        // std::list<VertexID>::iterator it = std::lower_bound(_orderK.begin(), _orderK.end(), curV, [&K, this](const uint& a, const uint& b){return comparekorder(a, b, K);});
+        // _orderK.insert(it, curV);
 
         for(const VertexID& neighbor : graph.getVertexNeighbors(curV))
         {
@@ -456,13 +401,13 @@ void CoreMaintainer::removeVertex(const VertexID& vid)
     degPlus.erase(vid);
     mcd.erase(vid);
     ostrees.at(1).erase(vid);
-    for(std::list<VertexID>::iterator it = orderkV.at(1).begin(); it != orderkV.at(1).end();)
-    {
-        if(*it == vid)
-        {
-            it = orderkV.at(1).erase(it);
-        }
-    }
+    // for(std::list<VertexID>::iterator it = orderkV.at(1).begin(); it != orderkV.at(1).end();)
+    // {
+    //     if(*it == vid)
+    //     {
+    //         it = orderkV.at(1).erase(it);
+    //     }
+    // }
 }
 
 void CoreMaintainer::orderRemove(const Graph& graph, const VertexID src, const VertexID dst)
@@ -541,7 +486,7 @@ void CoreMaintainer::orderRemove(const Graph& graph, const VertexID src, const V
             }
         }
         inVStar.erase(w);
-        orderkV[K-1].emplace_back(w);
+        // orderkV[K-1].emplace_back(w);
         ostrees[K-1].insertBack(w);
     }
 }
@@ -590,19 +535,24 @@ std::vector<VertexID> CoreMaintainer::traverseVStarFind(const Graph& graph, std:
         }
     }
     // 删除Ok中的VStar节点
-    std::list<VertexID>& orderK = orderkV.at(K);
-    for(std::list<VertexID>::iterator it = orderK.begin(); it != orderK.end();)
+    // std::list<VertexID>& orderK = orderkV.at(K);
+    // for(std::list<VertexID>::iterator it = orderK.begin(); it != orderK.end();)
+    // {
+    //     if(inVStar.find(*it) != inVStar.end())
+    //     {
+    //         VertexID _vid = *it;
+    //         it = orderK.erase(it);
+    //         ostrees.at(K).erase(_vid);
+    //     }
+    //     else
+    //     {
+    //         ++it;
+    //     }
+    // }
+    for(const std::pair<VertexID, uint>& p : inVStar)
     {
-        if(inVStar.find(*it) != inVStar.end())
-        {
-            VertexID _vid = *it;
-            it = orderK.erase(it);
-            ostrees.at(K).erase(_vid);
-        }
-        else
-        {
-            ++it;
-        }
+        VertexID _vid = p.first;
+        ostrees.at(K).erase(_vid);
     }
     return VStar;
 }
@@ -634,20 +584,20 @@ void CoreMaintainer::updatemcdRemove(const Graph& graph, const std::vector<Verte
     }
 }
 
-void CoreMaintainer::printOrderk(uint k) const
-{
-    if(orderkV.find(k) == orderkV.end())
-    {
-        std::cout << "No orderk for k = " << k << std::endl;
-        return ;
-    }
-    std::cout << "Orderk for k = " << k << ": ";
-    for(const VertexID& vid : orderkV.at(k))
-    {
-        std::cout << vid << " ";
-    }
-    std::cout << std::endl;
-}
+// void CoreMaintainer::printOrderk(uint k) const
+// {
+//     if(orderkV.find(k) == orderkV.end())
+//     {
+//         std::cout << "No orderk for k = " << k << std::endl;
+//         return ;
+//     }
+//     std::cout << "Orderk for k = " << k << ": ";
+//     for(const VertexID& vid : orderkV.at(k))
+//     {
+//         std::cout << vid << " ";
+//     }
+//     std::cout << std::endl;
+// }
 
 void CoreMaintainer::printOSTree(uint k) const
 {
