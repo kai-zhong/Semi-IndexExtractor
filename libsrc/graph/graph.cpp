@@ -219,8 +219,8 @@ void Graph::removeVertex(const VertexID& vid, bool updateIndex, bool computeVDig
 void Graph::addEdge(const VertexID& src, const VertexID& dst, bool updateIndex, bool computeVDigest)
 {
     // 会检查src和dst是否存在，不存在则会自动添加
-    addVertex(src, false, computeVDigest);
-    addVertex(dst, false, computeVDigest);
+    addVertex(src, false, false);
+    addVertex(dst, false, false);
     
     if(!nodes.at(src).hasNeighbor(dst))
     {

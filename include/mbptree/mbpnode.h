@@ -59,6 +59,9 @@ class MbpNode
         void setVertexDigest(const VertexID& vid, const std::array<unsigned char, SHA256_DIGEST_LENGTH>& _digest); // 设置关键字对应的顶点的摘要（仅叶子节点）
 
         void getDigest(unsigned char* _digest); // 获取节点摘要
+
+        void setFalseDigestComputed();
+
         void digestCompute();
 
         void constructVO(std::vector<VOEntry>& vo, std::vector<VertexID>& subgraphVids, const std::map<VertexID, std::string>& serializedVertexInfo);

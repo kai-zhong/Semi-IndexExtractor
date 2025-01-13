@@ -11,16 +11,21 @@
 #include "../graph/vertex.h"
 #include "../mbptree/mbpnode.h"
 #include "../mbptree/mbptree.h"
+#include "../coremaintainer/coremaintainer.h"
 #include "../util/common.h"
 #include "../configuration/types.h"
 
 class Vertex;
 class Graph;
+class MbpTree;
+class OSTree;
+class CoreMaintainer;
 
 class semiIndexExtractor
 {
     private:
-        std::unordered_map<VertexID, uint> cores;
+        // std::unordered_map<VertexID, uint> cores;
+        CoreMaintainer coremaintainer;
 
         std::vector<VertexID> candVertices;
         Graph candGraph;
@@ -37,6 +42,10 @@ class semiIndexExtractor
         ~semiIndexExtractor();
         
         void buildMbpTree(const Graph& graph, const uint maxcapacity);
+        void mbpTreeDigestCompute();
+        void mbpTreeAddUpdate(const Vertex& src, const Vertex& dst);
+        void mbpTreeDeleteEdgeUpdate(const Vertex& v); // 节点未被删除，但是节点信息发生改变，需要更新节点的摘要
+        void mbpTreeDeleteVertexUpdate(const VertexID& vid); // 节点被删除，需要删除mbp树中该节点的摘要
 
         std::map<VertexID, std::string> serializeGraphInfo(const Graph& graph, const Graph& subgraph, std::vector<VertexID>& subgraphVids);
 
@@ -50,7 +59,11 @@ class semiIndexExtractor
 
         const std::vector<VOEntry>& getVO() const;
 
-        const uint& getCore(const VertexID& vid) const;
+        uint getCore(const VertexID& vid) const;
+
+        void insertCoreUpdate(const Graph& graph, const VertexID& src, const VertexID& dst);
+
+        void removeCoreUpdate(const Graph& graph, const VertexID& src, const VertexID& dst);
 
         void coresDecomposition(const Graph& graph);
 

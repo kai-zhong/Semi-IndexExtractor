@@ -186,12 +186,22 @@ void MbpNode::setVertexDigest(const VertexID& vid, const std::array<unsigned cha
 
 void MbpNode::getDigest(unsigned char* _digest)
 {
-    if(isDigestComputed == false)
-    {
-        digestCompute();
-        isDigestComputed = true;
-    }
+    // if(isDigestComputed == false)
+    // {
+    //     digestCompute();
+    //     isDigestComputed = true;
+    // }
+    digestCompute();
     memcpy(_digest, digest, SHA256_DIGEST_LENGTH);
+}
+
+void MbpNode::setFalseDigestComputed()
+{
+    if(parent != nullptr && parent->isDigestComputed == true)
+    {
+        parent->setFalseDigestComputed();
+    }
+    isDigestComputed = false;
 }
 
 void MbpNode::digestCompute()
