@@ -55,7 +55,7 @@ class CoreMaintainer
         
         void orderRemove(const Graph& graph, const VertexID src, const VertexID dst);
         void removeVertex(const VertexID& vid);
-        std::vector<VertexID> traverseVStarFind(const Graph& graph, std::unordered_map<VertexID, uint>& inVStar, const VertexID& src, const VertexID& dst, uint K);
+        void traverseVStarFind(const Graph& graph, std::vector<VertexID>& VStar, std::unordered_map<VertexID, uint>& inVStar, const VertexID& src, const VertexID& dst, uint K);
         void updatemcdRemove(const Graph& graph, const std::vector<VertexID>& VStar, const std::unordered_map<VertexID, uint>& inVStar, uint K);
 
         // void printOrderk(uint k) const;

@@ -203,7 +203,6 @@ void CoreMaintainer::addVertex(const VertexID& vid)
     degPlus[vid] = 1;
     mcd[vid] = 1;
     ostrees.at(1).insertFront(vid);
-    // orderkV.at(1).emplace_front(vid);
 }
 
 void CoreMaintainer::orderInsert(const Graph& graph, const VertexID src, const VertexID dst) // 要考虑节点被新添加的情况
@@ -445,6 +444,7 @@ void CoreMaintainer::orderRemove(const Graph& graph, const VertexID src, const V
         removeVertex(dst);
         return ;
     }
+
     uint K = std::min(cores.at(src), cores.at(dst));
     OSTree& ost = ostrees.at(K);
     if(cores.at(src) <= cores.at(dst))
@@ -456,7 +456,8 @@ void CoreMaintainer::orderRemove(const Graph& graph, const VertexID src, const V
         --mcd[dst];
     }
     std::unordered_map<VertexID, uint> inVStar;
-    std::vector<VertexID> VStar = traverseVStarFind(graph, inVStar, src, dst, K); // 要负责删除OK中的VStar节点
+    std::vector<VertexID> VStar;
+    traverseVStarFind(graph, VStar, inVStar, src, dst, K); // 要负责删除OK中的VStar节点
 
     updatemcdRemove(graph, VStar, inVStar, K);
     for(const VertexID& w : VStar)
@@ -491,13 +492,13 @@ void CoreMaintainer::orderRemove(const Graph& graph, const VertexID src, const V
     }
 }
 
-std::vector<VertexID> CoreMaintainer::traverseVStarFind(const Graph& graph, std::unordered_map<VertexID, uint>& inVStar, const VertexID& src, const VertexID& dst, uint K)
+void CoreMaintainer::traverseVStarFind(const Graph& graph, std::vector<VertexID>& VStar, std::unordered_map<VertexID, uint>& inVStar, const VertexID& src, const VertexID& dst, uint K)
 {
     // 要负责删除OK中的VStar节点
-    std::vector<VertexID> VStar;
     std::queue<VertexID> Q;
-    std::unordered_map<VertexID, uint> cd = mcd;
+    std::unordered_map<VertexID, uint> cd;
     std::unordered_set<VertexID> removed;
+
     if(cores.at(src) == K)
     {
         Q.push(src);
@@ -511,6 +512,10 @@ std::vector<VertexID> CoreMaintainer::traverseVStarFind(const Graph& graph, std:
     {
         VertexID w = Q.front();
         Q.pop();
+        if(cd.find(w) == cd.end())
+        {
+            cd[w] = mcd[w];
+        }
         if(cores.at(w) == K && cd[w] < K)
         {
             VStar.emplace_back(w);
@@ -525,6 +530,10 @@ std::vector<VertexID> CoreMaintainer::traverseVStarFind(const Graph& graph, std:
                 }
                 if(cores.at(z) == K)
                 {
+                    if(cd.find(z) == cd.end())
+                    {
+                        cd[z] = mcd[z];
+                    }
                     --cd[z];
                     if(cd[z] < K)
                     {
@@ -534,27 +543,12 @@ std::vector<VertexID> CoreMaintainer::traverseVStarFind(const Graph& graph, std:
             }
         }
     }
-    // 删除Ok中的VStar节点
-    // std::list<VertexID>& orderK = orderkV.at(K);
-    // for(std::list<VertexID>::iterator it = orderK.begin(); it != orderK.end();)
-    // {
-    //     if(inVStar.find(*it) != inVStar.end())
-    //     {
-    //         VertexID _vid = *it;
-    //         it = orderK.erase(it);
-    //         ostrees.at(K).erase(_vid);
-    //     }
-    //     else
-    //     {
-    //         ++it;
-    //     }
-    // }
+
     for(const std::pair<VertexID, uint>& p : inVStar)
     {
         VertexID _vid = p.first;
         ostrees.at(K).erase(_vid);
     }
-    return VStar;
 }
 
 void CoreMaintainer::updatemcdRemove(const Graph& graph, const std::vector<VertexID>& VStar, const std::unordered_map<VertexID, uint>& inVStar, uint K)
