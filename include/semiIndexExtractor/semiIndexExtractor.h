@@ -6,12 +6,14 @@
 #include <queue>
 #include <algorithm>
 #include <list>
+#include <random>
 
 #include "../graph/graph.h"
 #include "../graph/vertex.h"
 #include "../mbptree/mbpnode.h"
 #include "../mbptree/mbptree.h"
-#include "../coremaintainer/coremaintainer.h"
+#include "../maintainer/coremaintainer.h"
+#include "../maintainer/shelltree.h"
 #include "../util/common.h"
 #include "../configuration/types.h"
 
@@ -20,12 +22,14 @@ class Graph;
 class MbpTree;
 class OSTree;
 class CoreMaintainer;
+class ShellTree;
 
 class semiIndexExtractor
 {
     private:
         // std::unordered_map<VertexID, uint> cores;
         CoreMaintainer coremaintainer;
+        ShellTree* shellTree;
 
         std::vector<VertexID> candVertices;
         Graph candGraph;
@@ -55,7 +59,7 @@ class semiIndexExtractor
 
         void vertify(Graph& subgraph, std::queue<VOEntry>& VO, unsigned char* partdigest);
 
-        void calculateVOSize();
+        size_t calculateVOSize();
 
         const std::vector<VOEntry>& getVO() const;
 
@@ -73,6 +77,9 @@ class semiIndexExtractor
 
         Graph kcoreExtract(const Graph& graph, const VertexID& queryV, const uint& k);
 
+        // Graph kcoreExtractByShell(const Graph& graph, const VertexID& queryV, const uint& k);
+        std::chrono::milliseconds kcoreExtractByShell(const Graph& graph, const VertexID& queryV, const uint& k);
+
         VertexID getLiIndexTop() const;
 
         void liIndexPop();
@@ -84,6 +91,10 @@ class semiIndexExtractor
         bool isLiIndexEmpty() const;
 
         const Graph& getCandGraph() const;
+
+        void buildShellTree(const Graph& graph);
+
+        void getTestData(const Graph& graph);
 
         void printVO() const;
 

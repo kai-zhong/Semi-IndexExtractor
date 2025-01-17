@@ -41,9 +41,13 @@ class CoreMaintainer
         CoreMaintainer(const Graph& graph);
 
         uint getCore(const VertexID& vid) const;
+        OSTree& getOSTree(uint k);
+        bool hasOSTree(uint k) const;
+        const std::unordered_map<VertexID, uint>& getCoresSet() const;
 
         void insertToOrderk(const std::vector<VertexID>& vert, const std::vector<VertexID> local2global, uint startPos, uint endPos, uint k);
         void initmcd(const Graph& graph, const std::vector<VertexID> local2global);
+        void initmcdTest(const Graph& graph);
         void coresDecomp(const Graph& graph);
 
         bool comparekorder(const uint& a, const uint& b, const uint& k);
@@ -59,6 +63,7 @@ class CoreMaintainer
         void updatemcdRemove(const Graph& graph, const std::vector<VertexID>& VStar, const std::unordered_map<VertexID, uint>& inVStar, uint K);
 
         // void printOrderk(uint k) const;
+        void testOSTree();
         void printOSTree(uint k) const;
         void printCores() const;
 };

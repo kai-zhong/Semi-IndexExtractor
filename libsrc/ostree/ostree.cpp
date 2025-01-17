@@ -263,13 +263,13 @@ uint OSTree::rank(std::shared_ptr<TreeNode> node) const
 {
     uint vRank = (node->left ? node->left->size : 0) + 1;
     std::shared_ptr<TreeNode> current = node;
-    while(current->parent != nullptr)
+    while(auto _parent = current->parent.lock())
     {
-        if(current == current->parent->right)
+        if(current == _parent->right)
         {
-            vRank += (current->parent->left ? current->parent->left->size : 0) + 1;
+            vRank += (_parent->left ? _parent->left->size : 0) + 1;
         }
-        current = current->parent;
+        current = _parent;
     }
     return vRank;
 }
@@ -292,9 +292,9 @@ void OSTree::inOrderTraversal(std::shared_ptr<TreeNode> node) const
         return;
     }
     std::cout << node->vid;
-    if(node->parent!= nullptr)
+    if(auto _parent = node->parent.lock())
     {
-        std::cout << "[parent=" << node->parent->vid << ", ";
+        std::cout << "[parent=" << _parent->vid << ", ";
     }
     else
     {
@@ -345,19 +345,28 @@ void OSTree::insertBack(const VertexID& vid)
 void OSTree::erase(const VertexID& vid)
 {
     root = erase(root, getRank(vid));
-    if(root != nullptr && root->parent != nullptr)
+    if(root != nullptr)
     {
-        root->parent = nullptr;
+        if(auto _parent = root->parent.lock())
+        {
+            _parent = nullptr;    
+        }
     }
 }
 
 uint OSTree::getRank(const VertexID& vid)
 { 
+    // std::cout << "Get Vertex " << vid << " rank" << std::endl;
     if(node_map.find(vid) == node_map.end())
     {
         std::cerr << "OSTree Error: vertex " << vid << " not found" << std::endl;
         throw std::runtime_error("OSTree Error: vertex not found");
     }
+    if(node_map[vid] == nullptr)
+    {
+        std::cout << "OSTree Warning: vertex " << vid << " not in tree" << std::endl;
+    }
+    // std::cout << "Vertex " << vid << " rank is " << rank(node_map[vid]) << std::endl;
     return rank(node_map[vid]);
 }
 
@@ -406,5 +415,20 @@ void OSTree::showMap() const
     for(auto it = node_map.begin(); it != node_map.end(); ++it)
     {
         std::cout << it->first << "->" << it->second->vid << "[rank=" << rank(it->second) << "]" << std::endl;
+    }
+}
+
+void OSTree::check()
+{
+    std::unordered_set<std::shared_ptr<TreeNode>> visited;
+    for(const std::pair<VertexID, std::shared_ptr<TreeNode>> &p : node_map)
+    {
+        std::shared_ptr<TreeNode> node = p.second;
+        if(visited.find(node) != visited.end())
+        {
+            std::cerr << "OSTree Error: cycle detected" << std::endl;
+            throw std::runtime_error("OSTree Error: cycle detected");
+        }
+        visited.insert(node);
     }
 }

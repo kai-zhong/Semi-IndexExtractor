@@ -7,6 +7,8 @@
 #include <iomanip>
 #include <queue>
 #include <sstream>
+#include <fstream>
+#include <vector>
 #include <utility>
 #include <unordered_map>
 #include <unordered_set>
@@ -19,10 +21,12 @@ struct cmdOptions
     std::string filename;
     std::string addFilename;
     std::string deleteFilename;
+    std::string experimentFilePath;
     VertexID query;
     uint k;
     uint khop;
     uint maxcapacity;
+    std::map<uint, std::vector<VertexID>> queryMap;
 };
 
 struct VOEntry

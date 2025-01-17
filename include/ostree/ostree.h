@@ -3,6 +3,7 @@
 #include <iostream>
 #include <algorithm>
 #include <unordered_map>
+#include <unordered_set>
 #include <map>
 #include <memory>
 #include <chrono>
@@ -18,7 +19,7 @@ struct TreeNode
     uint height; // 以当前节点为根的子树高度
     std::shared_ptr<TreeNode> left;
     std::shared_ptr<TreeNode> right;
-    std::shared_ptr<TreeNode> parent;
+    std::weak_ptr<TreeNode> parent;
 
     TreeNode(VertexID _vid, std::shared_ptr<TreeNode> _parent = nullptr) : vid(_vid), size(1), height(1), left(nullptr), right(nullptr), parent(_parent) {}
 };
@@ -61,4 +62,5 @@ class OSTree
         uint size() const;
         void display() const;
         void showMap() const;
+        void check();
 };

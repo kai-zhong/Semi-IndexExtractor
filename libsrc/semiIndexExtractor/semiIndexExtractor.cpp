@@ -4,6 +4,7 @@ semiIndexExtractor::semiIndexExtractor()
 {
     answerExists = false;
     mbptree = nullptr;
+    shellTree = nullptr;
 }
 
 semiIndexExtractor::~semiIndexExtractor()
@@ -11,6 +12,10 @@ semiIndexExtractor::~semiIndexExtractor()
     if(mbptree != nullptr)
     {
         delete mbptree;
+    }
+    if(shellTree != nullptr)
+    {
+        delete shellTree;
     }
 }
 
@@ -108,6 +113,10 @@ void semiIndexExtractor::constructVO(const Graph& G, const Graph& subgraph)
     subgraphVids.reserve(subgraph.getVertexNum());
     std::map<VertexID, std::string> serializedInfo = serializeGraphInfo(G, subgraph, subgraphVids);
     std::cout << "Serialized graph information has been constructed. " << std::endl;
+    if(!vo.empty())
+    {
+        vo.clear();
+    }
     mbptree->constructVO(vo, subgraphVids, serializedInfo);
     std::cout << "VO has been constructed." << std::endl;
 }
@@ -208,7 +217,7 @@ void semiIndexExtractor::vertify(Graph& subgraph, std::queue<VOEntry>& VO, unsig
     std::cout << std::endl;
 }
 
-void semiIndexExtractor::calculateVOSize()
+size_t semiIndexExtractor::calculateVOSize()
 {
     // size_t totalSize = sizeof(vo); // vector 内部结构的占用
     size_t totalSize = 0; // 仅计算 VOEntry 占用的大小
@@ -220,11 +229,12 @@ void semiIndexExtractor::calculateVOSize()
             totalSize += std::strlen(entry.nodeData) + 1; // 动态分配的 nodeData 大小
         }
     }
-    std::cout << "Total size of vo:" << std::endl;
-    std::cout << "  Bytes: " << totalSize << " B" << std::endl;
-    std::cout << "  Kilobytes: " << totalSize / 1024.0 << " KB" << std::endl;
-    std::cout << "  Megabytes: " << totalSize / (1024.0 * 1024.0) << " MB" << std::endl;
-    std::cout << std::endl;
+    // std::cout << "Total size of vo:" << std::endl;
+    // std::cout << "  Bytes: " << totalSize << " B" << std::endl;
+    // std::cout << "  Kilobytes: " << totalSize / 1024.0 << " KB" << std::endl;
+    // std::cout << "  Megabytes: " << totalSize / (1024.0 * 1024.0) << " MB" << std::endl;
+    // std::cout << std::endl;
+    return totalSize;
 }
 
 const std::vector<VOEntry>& semiIndexExtractor::getVO() const
@@ -240,6 +250,7 @@ uint semiIndexExtractor::getCore(const VertexID& vid) const
 void semiIndexExtractor::insertCoreUpdate(const Graph& graph, const VertexID& src, const VertexID& dst)
 {
     coremaintainer.orderInsert(graph, src, dst);
+    // coremaintainer.testOSTree();
 }
 
 void semiIndexExtractor::removeCoreUpdate(const Graph& graph, const VertexID& src, const VertexID& dst)
@@ -250,7 +261,7 @@ void semiIndexExtractor::removeCoreUpdate(const Graph& graph, const VertexID& sr
 void semiIndexExtractor::coresDecomposition(const Graph& graph)
 {
     coremaintainer.coresDecomp(graph);
-
+    // std::cout << "coremaintainer: Vertex " << 1 << " is in core " << coremaintainer.getCore(1) << std::endl;
     // uint vertexNum = graph.getVertexNum();
     // std::unordered_map<VertexID, VertexID> global2local;
     // std::vector<VertexID> local2global = graph.convertToLocalID();
@@ -430,27 +441,38 @@ void semiIndexExtractor::candidateGeneration(const Graph& graph, const VertexID&
     {
         candVertices.clear();
     }
-    std::unordered_map<VertexID, bool> visited;
+    std::unordered_set<VertexID> visited;
+    std::unordered_set<VertexID> inQueue;
+    std::queue<VertexID> q;
 
-    for(const std::pair<VertexID, Vertex>& nodePair : graph.getNodes())
+    // initLiIndex(queryV);
+    q.push(queryV);
+
+    // while(!isLiIndexEmpty())
+    while(!q.empty())
     {
-        visited[nodePair.first] = false;
-    }
+        // VertexID currentV = getLiIndexTop();
+        VertexID currentV = q.front();
 
-    initLiIndex(queryV);
+        visited.insert(currentV);
 
-    while(!isLiIndexEmpty())
-    {
-        VertexID currentV = getLiIndexTop();
-        visited[currentV] = true;
-        liIndexPop();
+        // liIndexPop();
+        q.pop();
 
         candGraph.addVertex(currentV, true, false);
         for(const VertexID& neighbor : graph.getVertexNeighbors(currentV))
         {
-            if(visited[neighbor] == true)
+            if(visited.find(neighbor) != visited.end())
             {
                 candGraph.addEdge(currentV, neighbor, true, false);
+            }
+            else
+            {
+                if(inQueue.find(neighbor) == inQueue.end() && coremaintainer.getCore(neighbor) >= k)
+                {
+                    q.push(neighbor);
+                    inQueue.insert(neighbor);
+                }
             }
         }
         candVertices.emplace_back(currentV);
@@ -471,7 +493,7 @@ void semiIndexExtractor::candidateGeneration(const Graph& graph, const VertexID&
         }
 
         // 批量更新LiIndex
-        insertToLiIndex(graph, currentV, visited, k);
+        // insertToLiIndex(graph, currentV, visited, k);
         // std::cout << "CurrentV : " << currentV << ": "<<std::endl;
         // printLiIndex();
     }
@@ -523,13 +545,136 @@ Graph semiIndexExtractor::kcoreExtract(const Graph& graph, const VertexID& query
         globalExtract(queryV, k);
     }
 
-    constructVO(graph, candGraph);
+    // constructVO(graph, candGraph);
     return candGraph;
 }
+
+std::chrono::milliseconds semiIndexExtractor::kcoreExtractByShell(const Graph& graph, const VertexID& queryV, const uint& k)
+{
+    auto start = std::chrono::high_resolution_clock::now();
+    constructVO(graph, candGraph);
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "VO construction time: " << duration.count() << " ms" << std::endl;
+    return shellTree->query(graph, queryV, coremaintainer.getCore(queryV), k) + duration;
+}
+
+// Graph semiIndexExtractor::kcoreExtractByShell(const Graph& graph, const VertexID& queryV, const uint& k)
+// {
+//     candGraph = shellTree->query(graph, queryV, coremaintainer.getCore(queryV), k);
+//     // constructVO(graph, candGraph);
+//     return candGraph;
+// }
 
 const Graph& semiIndexExtractor::getCandGraph() const
 {
     return candGraph;
+}
+
+void semiIndexExtractor::buildShellTree(const Graph& graph)
+{
+    if(shellTree != nullptr)
+    {
+        delete shellTree;
+        shellTree = nullptr;
+    }
+    shellTree = new ShellTree();
+    shellTree->buildTree(graph, coremaintainer.getCoresSet());
+}
+
+void semiIndexExtractor::getTestData(const Graph& graph)
+{
+    uint maxCore = 0;
+    uint minDegree = std::numeric_limits<uint>::max();
+    for(const std::pair<VertexID, uint>& corePair : coremaintainer.getCoresSet())
+    {
+        maxCore = std::max(maxCore, corePair.second);
+    }
+    for(const std::pair<VertexID, uint>& corePair : coremaintainer.getCoresSet())
+    {
+        if(corePair.second == maxCore)
+        {
+            minDegree = std::min(minDegree, graph.getVertexDegree(corePair.first));
+        }
+    }
+
+    std::cout << "Eta : " << minDegree << std::endl;
+
+    int s = minDegree / 10; // 初始 s 值
+    bool isValid = false;
+    std::vector<int> queryks; // 最终的 queryks
+
+    for(size_t i = 1; i <= 8; i++)
+    {
+        queryks.emplace_back(s * i);
+    }
+
+    // 输出最终的 queryks
+    std::cout << "Final queryks: ";
+    for (int k : queryks) {
+        std::cout << k << " ";
+    }
+    std::cout << std::endl;
+
+    std::random_device rd;
+    std::mt19937 gen(rd());
+
+    std::map<int, std::vector<VertexID>> queryVertices;
+    std::vector<VertexID> vids;
+    for(const auto& k : queryks)
+    {
+        for(size_t i = k; i < minDegree; i++)
+        {
+            if(coremaintainer.hasOSTree(i))
+            {
+                OSTree& ost = coremaintainer.getOSTree(i);
+                int ostSize = ost.size();
+                for(int j = 1; j < std::min(1000, ostSize); j++)
+                {
+                    vids.emplace_back(ost.at(j));
+                }
+            }
+        }
+    }
+
+    for(const int& k : queryks)
+    {
+        std::shuffle(vids.begin(), vids.end(), gen);
+        std::vector<VertexID> queryVerticesK(vids.begin(), vids.begin() + 100);
+        queryVertices[k] = queryVerticesK;
+        std::cout << "Query " << k << " over" << std::endl;
+    }
+
+    for(const auto& pair : queryVertices)
+    {
+        std::cout << "Query " << pair.first << " : ";
+        for(int i = 0; i < 10; i++)
+        {
+            std::cout << queryVertices[pair.first][i] << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    std::string outputPath = "/home/zhongkai/workspace/communitysearch/Dataset/Youtube/query.txt";
+    std::ofstream outFile(outputPath);
+    if (!outFile.is_open())
+    {
+        std::cerr << "Failed to open file for writing." << std::endl;
+        return;
+    }
+
+    for (const auto& pair : queryVertices)
+    {
+        outFile << pair.first; // 写入键
+        for (const VertexID& vertex : pair.second)
+        {
+            outFile << " " << vertex; // 写入每个顶点
+        }
+        outFile << std::endl; // 换行
+    }
+
+    outFile.close();
+    std::cout << "Query vertices have been written to queryVertices.txt" << std::endl;
 }
 
 void semiIndexExtractor::printVO() const

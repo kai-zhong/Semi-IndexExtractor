@@ -1,4 +1,4 @@
-#include "coremaintainer/coremaintainer.h"
+#include "maintainer/coremaintainer.h"
 
 CoreMaintainer::CoreMaintainer()
 {}
@@ -19,6 +19,26 @@ uint CoreMaintainer::getCore(const VertexID& vid) const
     return it->second;
 }
 
+OSTree& CoreMaintainer::getOSTree(uint k)
+{
+    if(ostrees.find(k) == ostrees.end())
+    {
+        std::cerr << "OSTree of k = " << k << " not found" << std::endl;
+        throw std::runtime_error("OSTree not found");
+    }
+    return ostrees.at(k);
+}
+
+bool CoreMaintainer::hasOSTree(uint k) const
+{
+    return ostrees.find(k) != ostrees.end();
+}
+
+const std::unordered_map<VertexID, uint>& CoreMaintainer::getCoresSet() const
+{
+    return cores;
+}
+
 void CoreMaintainer::insertToOrderk(const std::vector<VertexID>& vert, const std::vector<VertexID> local2global, uint startPos, uint endPos, uint k)
 {
     if(startPos >= vert.size() || endPos > vert.size() || startPos > endPos)
@@ -34,10 +54,15 @@ void CoreMaintainer::insertToOrderk(const std::vector<VertexID>& vert, const std
 
     std::unordered_map<VertexID, uint>& _degPlus = degPlus;
     std::vector<VertexID> orderVert(vert.begin() + startPos, vert.begin() + endPos); // 不包括索引为 endPos 的元素
-
+    std::unordered_set<VertexID> visited;
     /* k-order序保持 */
     for(uint i = 0; i < orderVert.size(); i++)
     {
+        if(visited.find(orderVert[i]) != visited.end())
+        {
+            std::cout << "Waring : vertex " << orderVert[i] << " has been visited" << std::endl;
+        }
+        visited.insert(orderVert[i]);
         ostrees[k].insertBack(local2global[orderVert[i]]);
         // orderkV[k].push_back(local2global[orderVert[i]]);
     }
@@ -74,6 +99,23 @@ void CoreMaintainer::initmcd(const Graph& graph, const std::vector<VertexID> loc
     }
 }
 
+void CoreMaintainer::initmcdTest(const Graph& graph)
+{
+    for(const std::pair<VertexID, Vertex>& p : graph.getNodes())
+    {
+        VertexID vid = p.first;
+        uint vCore = cores.at(vid);
+        mcd[vid] = 0;
+        for(const VertexID& neighbor : graph.getVertexNeighbors(vid))
+        {
+            if(cores.at(neighbor) >= vCore)
+            {
+                mcd[vid]++;
+            }
+        }
+    }
+}
+
 void CoreMaintainer::coresDecomp(const Graph& graph)
 {
     uint vertexNum = graph.getVertexNum();
@@ -81,14 +123,18 @@ void CoreMaintainer::coresDecomp(const Graph& graph)
     std::vector<VertexID> local2global = graph.convertToLocalID();
     std::vector<uint> degree(vertexNum);
     std::vector<uint> degreeP(vertexNum);
-    std::vector<uint> bin(vertexNum, 0);
-    std::vector<uint> pos(vertexNum);
-    std::vector<VertexID> vert(vertexNum);
+    std::vector<uint> bin(vertexNum, 0); // bin[i]表示度数i的节点的起始位置，bin[1]到bin[2]表示度数为1的节点的位置范围
+    std::vector<uint> pos(vertexNum); // 每次节点在vert数组中的位置
+    std::vector<VertexID> vert(vertexNum); // 节点按度数从小到大排序
     uint maxDegree = 0;
 
     if(!cores.empty())
     {
         cores.clear();
+    }
+    if(!ostrees.empty())
+    {
+        ostrees.clear();
     }
 
     global2local.reserve(vertexNum);
@@ -241,6 +287,7 @@ void CoreMaintainer::orderInsert(const Graph& graph, const VertexID src, const V
     VertexID v = dst; // k-order更大的节点
     uint srcCore = cores.at(src);
     uint dstCore = cores.at(dst);
+
     uint K = std::min(cores.at(src), cores.at(dst));
     OSTree& ost = ostrees.at(K);
     if(dstCore < srcCore || ( dstCore == srcCore && ost.getRank(src) > ost.getRank(dst)))
@@ -257,7 +304,8 @@ void CoreMaintainer::orderInsert(const Graph& graph, const VertexID src, const V
     }
     else
     {
-        minHeap.push(std::make_pair(ost.getRank(u), u));
+        uint uRank = ost.getRank(u);
+        minHeap.push(std::make_pair(uRank, u));
         inHeap.insert(u);
     }
 
@@ -265,24 +313,44 @@ void CoreMaintainer::orderInsert(const Graph& graph, const VertexID src, const V
     std::unordered_map<VertexID, uint> inVc; // 候选集中是否包含节点,uint保存了节点的k-order位置
 
     std::unordered_map<VertexID, uint> degStar;
-
     while(!inHeap.empty())
     {
         VertexID curV = minHeap.top().second;
         uint curVRank = minHeap.top().first;
+        while(inHeap.find(curV) == inHeap.end() && !minHeap.empty())
+        {
+            minHeap.pop();
+            curV = minHeap.top().second;
+            curVRank = minHeap.top().first;
+        }
+        if(minHeap.empty())
+        {
+            break;
+        }
         minHeap.pop();
         inHeap.erase(curV);
+        if(degStar.find(curV) == degStar.end())
+        {
+            degStar[curV] = 0;
+        }
         if(degStar[curV] + degPlus[curV] > K)
         {
             inVc[curV] = curVRank;
             Vc.emplace_back(curV);
             for(const VertexID& neighbor : graph.getVertexNeighbors(curV))
             {
-                if(inHeap.find(neighbor) == inHeap.end() && cores.at(neighbor) == K && curVRank < ost.getRank(neighbor))
+                if(cores.at(neighbor) == K && curVRank < ost.getRank(neighbor))
                 {
+                    if(degStar.find(neighbor) == degStar.end())
+                    {
+                        degStar.insert(std::make_pair(neighbor, 0));
+                    }
                     ++degStar[neighbor];
-                    minHeap.push(std::make_pair(ost.getRank(neighbor), neighbor));
-                    inHeap.insert(neighbor);
+                    if(inHeap.find(neighbor) == inHeap.end())
+                    {
+                        minHeap.push(std::make_pair(ost.getRank(neighbor), neighbor));
+                        inHeap.insert(neighbor);
+                    }
                 }
             }
         }
@@ -293,7 +361,6 @@ void CoreMaintainer::orderInsert(const Graph& graph, const VertexID src, const V
             removeCandidates(graph, degStar, inVc, inHeap, curV, K);
         }
     }
-
     /* 结束阶段 */
     std::vector<VertexID> VStar;
     for(const VertexID& w : Vc)
@@ -312,6 +379,7 @@ void CoreMaintainer::orderInsert(const Graph& graph, const VertexID src, const V
         ostrees[K+1].insertFront(w);
     }
     updatemcdInsert(graph, VStar, K);
+    // initmcdTest(graph);
 }
 
 void CoreMaintainer::removeCandidates(const Graph& graph, std::unordered_map<VertexID, uint>& degStar, std::unordered_map<VertexID, uint>& inVc, 
@@ -325,6 +393,10 @@ void CoreMaintainer::removeCandidates(const Graph& graph, std::unordered_map<Ver
     {
         if(inVc.find(neighbor) != inVc.end())
         {
+            if(degStar.find(neighbor) == degStar.end())
+            {
+                degStar[neighbor] = 0;
+            }
             --degPlus[neighbor];
             if(degPlus[neighbor] + degStar[neighbor] <= K)
             {
@@ -333,7 +405,6 @@ void CoreMaintainer::removeCandidates(const Graph& graph, std::unordered_map<Ver
             }
         }
     }
-
     while(!Q.empty())
     {
         VertexID curV = Q.front();
@@ -354,6 +425,10 @@ void CoreMaintainer::removeCandidates(const Graph& graph, std::unordered_map<Ver
                 if(wRank < neighborRank)
                 {
                     --degStar[neighbor];
+                    if(inHeap.find(neighbor) != inHeap.end() && degStar[neighbor] == 0 && degPlus[neighbor] <= K)
+                    {
+                        inHeap.erase(neighbor);
+                    }
                 }
                 else if(curVRank < neighborRank && inVc.find(neighbor) != inVc.end())
                 {
@@ -380,15 +455,19 @@ void CoreMaintainer::removeCandidates(const Graph& graph, std::unordered_map<Ver
 
 void CoreMaintainer::updatemcdInsert(const Graph& graph, const std::vector<VertexID>& VStar, uint K)
 {
+    std::unordered_set<VertexID> VStarSet(VStar.begin(), VStar.end());
     for(const VertexID& w : VStar)
     {
         mcd[w] = 0;
         for(const VertexID& neighbor : graph.getVertexNeighbors(w))
         {
-            if(cores.at(neighbor) == K + 1)
+            if(VStarSet.find(neighbor) == VStarSet.end() && cores.at(neighbor) == K + 1)
+            {
+                mcd[neighbor]++;
+            }
+            if(cores.at(neighbor) >= K + 1)
             {
                 mcd[w]++;
-                mcd[neighbor]++;
             }
         }
     }
@@ -460,6 +539,7 @@ void CoreMaintainer::orderRemove(const Graph& graph, const VertexID src, const V
     traverseVStarFind(graph, VStar, inVStar, src, dst, K); // 要负责删除OK中的VStar节点
 
     updatemcdRemove(graph, VStar, inVStar, K);
+    // initmcdTest(graph);
     for(const VertexID& w : VStar)
     {
         degPlus[w] = 0;
@@ -496,20 +576,29 @@ void CoreMaintainer::traverseVStarFind(const Graph& graph, std::vector<VertexID>
 {
     // 要负责删除OK中的VStar节点
     std::queue<VertexID> Q;
+    std::unordered_set<VertexID> inQ;
     std::unordered_map<VertexID, uint> cd;
     std::unordered_set<VertexID> removed;
 
     if(cores.at(src) == K)
     {
         Q.push(src);
+        inQ.insert(src);
     }
     if(cores.at(dst) == K)
     {
         Q.push(dst);
+        inQ.insert(dst);
     }
-
+    
+    int cnt = 0;
     while(!Q.empty())
     {
+        cnt++;
+        if(cnt % 1000 == 0)
+        {
+            std::cout << "cnt = " << cnt << std::endl;
+        }
         VertexID w = Q.front();
         Q.pop();
         if(cd.find(w) == cd.end())
@@ -524,7 +613,7 @@ void CoreMaintainer::traverseVStarFind(const Graph& graph, std::vector<VertexID>
             --cores[w];
             for(const VertexID& z : graph.getVertexNeighbors(w))
             {
-                if(removed.find(z) != removed.end())
+                if(removed.find(z) != removed.end() || inQ.find(z) != inQ.end())
                 {
                     continue;
                 }
@@ -533,11 +622,16 @@ void CoreMaintainer::traverseVStarFind(const Graph& graph, std::vector<VertexID>
                     if(cd.find(z) == cd.end())
                     {
                         cd[z] = mcd[z];
+                        if(cd[z] == 0)
+                        {
+                            std::cout << "cd error" << std::endl;
+                        }
                     }
                     --cd[z];
                     if(cd[z] < K)
                     {
                         Q.push(z);
+                        inQ.insert(z);
                     }
                 }
             }
@@ -566,10 +660,9 @@ void CoreMaintainer::updatemcdRemove(const Graph& graph, const std::vector<Verte
             {
                 if(cores.at(neighbor) == K)
                 {
-                    mcd[w]++;
                     mcd[neighbor]--;
                 }
-                else if(cores.at(neighbor) == K - 1)
+                if(cores.at(neighbor) >= K - 1)
                 {
                     mcd[w]++;
                 }
@@ -592,6 +685,29 @@ void CoreMaintainer::updatemcdRemove(const Graph& graph, const std::vector<Verte
 //     }
 //     std::cout << std::endl;
 // }
+
+void CoreMaintainer::testOSTree()
+{
+    std::unordered_set<VertexID> visited;
+    for(size_t i = 0; i < ostrees.size(); i++)
+    {
+        if(ostrees.find(i) == ostrees.end())
+        {
+            continue;
+        }
+        OSTree& ost = ostrees.at(i);
+        ost.check();
+        for(size_t j = 1; j <= ost.size(); j++)
+        {
+            VertexID vid = ost.at(j);
+            if(visited.find(vid) != visited.end())
+            {
+                std::cout << "OSTree error" << std::endl;
+            }
+            visited.insert(vid);
+        }
+    }
+}
 
 void CoreMaintainer::printOSTree(uint k) const
 {
